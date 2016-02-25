@@ -2,11 +2,6 @@
 
 import socket
 import sys
-import subprocess
-import struct
-import fcntl
-from netaddr import *
-from pyroute2 import iproute
 from contextlib import contextmanager
 
 ipa = sys.argv[1]
