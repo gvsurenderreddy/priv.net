@@ -28,12 +28,12 @@ def add_conf(dev):
 
 	table_id = int(str(dev)[3:]) + 1  # table_id based on ppp interface int
 	handler = iproute.IPRoute()
-	index = handler.link_lookup(ifname=str(dev))[0]
-	vpnclient = (handler.get_addr(match=lambda x: x['index'] == int(index)))[0]['attrs'][0][1]
+	# index = handler.link_lookup(ifname=str(dev))[0]
+	# vpnclient = (handler.get_addr(match=lambda x: x['index'] == int(index)))[0]['attrs'][0][1]
+	vpnclient = handler.get_addr(label=str(dev))[0]['attrs'][0][1]
 
 	if handler.get_routes(match=lambda x: x['table'] == table_id):
-		print('[*] Table already exists')
-		print('[*] Renewing ... ')
+		print('[*] Routing table for ' + str(dev) + ' already exists\n[*] Renewing ... ')
 		handler.flush_routes(table=table_id)  # emptying existing - secondary - routing table
 	else:
 		print('[*] Inserting new routing table for ' + str(dev) + ' ... ')
@@ -52,6 +52,7 @@ def del_conf(dev):
 	handler = iproute.IPRoute()
 
 	if handler.get_routes(match=lambda x: x['table'] == table_id):
+		print('Deleting routing configuration for ' + str(dev))
 		handler.flush_routes(table=table_id)
 	else:
 		print('[*] Table ' + str(table_id) + ' not found\n[*] Searching for corresponding IP rule ...')
@@ -74,19 +75,19 @@ def vpn_connection_handler(*args, **kwargs):
 			tun = str(args[1][1])[9:]
 			if int(tun[3:]) in range(0, 90):
 				if args[0] == dbus.String(u'starting'):
-					print('[*] Virtual interface ' + str(tun) + ' starting ...')
+					print('[*] Virtual interface starting ...')
 				elif args[0] == dbus.String(u'started'):
-					print('[*] ' + str(tun) + ' ACTIVATED')
+					print('[*] Virtual interface ' + str(tun) + ' activated')
 					add_conf(tun)
 				elif args[0] == dbus.String(u'stopping'):
-					print('[*] Virtual interface ' + str(tun) + ' stopping...')
+					print('[*] Virtual interface stopping ...')
 				elif args[0] == dbus.String(u'stopped'):
-					print('[*] ' + str(tun) + ' DEACTIVATED')
+					print('[*] Virtual interface ' + str(tun) + ' deactivated')
 					del_conf(tun)
 				else:
-					print('***** WARNING: Something unexpected happened *****')
+					print('[WARNING]: Something unexpected happened')
 			else:
-				print('***** ERROR: Exceeded maximum number (90) of potential virtual networks *****')
+				print('[ERROR]: Exceeded maximum number (90) of potential virtual networks')
 		else:
 			pass
 
