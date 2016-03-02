@@ -2,93 +2,55 @@
 
 import socket
 import requests
-import urlparse
 from netaddr import *
-from contextlib import contextmanager
 import config
 
+# destination testing
 destinations = {'PC 1': '10.0.1.6', 'Google': 'google.com', 'PC 1 again': '10.0.1.6', 'Google once more': 'google.com'}
-# associating private nodes with the corresponding virtual interface
-virt_devices = {}
+# associating private networks with the corresponding virtual interface
+virt_devices = {'10.0.0.0/8': 'ppp0'}
 
 
 # check whether host belongs to a private network
-def check_private_host(addr):
-
+def check_private_host(dst):
 	for cidr in config.NETWORK_CONNECT_PRIVATE:
-		if IPAddress(str(addr)) in IPNetwork(str(cidr)):
-			return True
+		if IPAddress(str(dst)) in IPNetwork(str(cidr)):
+			return cidr
 		else:
 			continue
 	return False
 
 
-@contextmanager
-def reset(sock):
-	try:
-		yield sock
-	finally:
-		sock.unbind()
-
-
 # monkey patch socket to BINDTODEVICE
-def bind_device(ip='', iface=''):
+def bind_device(assocs):
 
 	_socket = socket.socket
 
 	class Socket(_socket):
 
-		global url
-
-		def __init__(self, *args, **kwargs):
-			self.iface = iface
-			self.ip = ip
-			self.url = url
-			super(Socket, self).__init__(*args, **kwargs)
-			with reset(self):
-				self.bind()
-
-		def bind(self):
-			if self.url.split(':')[0] not in ['http', 'https']:
-				self.url = 'http://' + self.url
-			parser = urlparse.urlparse(self.url)
-			self.ip = parser.hostname
-			if not check_private_host(socket.gethostbyname(self.ip)):
+		def connect(self, *args, **kwargs):
+			addr, port = args[0]  # destination (IP, PORT)
+			priv = check_private_host(socket.gethostbyname(addr))
+			if not priv:
 				pass
 			else:
-				print('NOTICE: Private host detected! Attempting connection ...')
-				self.iface = raw_input('Provide outgoing interface: ')
-				self.setsockopt(socket.SOL_SOCKET, 25, self.iface)  # define SO_BINDTODEVICE 25
+				print('NOTICE: Private host detected. Attempting connection ...')
+				for key, value in assocs.iteritems():
+					if key == priv:
+						iface = assocs[key]
+						self.setsockopt(socket.SOL_SOCKET, 25, iface)  # define SO_BINDTODEVICE 25
 
-		def unbind(self):
-			pass
-			# socket.socket = Socket
-			# return socket.socket
+			super(Socket, self).connect(*args, **kwargs)
 
 	return Socket
 
-socket.socket = bind_device()
+socket.socket = bind_device(virt_devices)
 
-for host, addr in destinations.iteritems():
+for host, ip in destinations.iteritems():
 	print('Poking ' + str(host) + ' ...')
 	url = 'http://' + str(destinations[host])
 	req = requests.get(url, timeout=2)
 	if req and str(host)[:6] == 'Google':
-		print('Google responded OK')
+		print('Google responded OK\n')
 	else:
-		print(req.text)
-
-url = '10.0.1.6'
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.settimeout(2)
-try:
-	print('\tBinding locally ... ')
-	s.connect((url, 5000))
-	print('\tConnected to: ' + str(url))
-	s.send('Made it to the NAT network!')
-	data = s.recv(1024)
-	s.close()
-	print('=======>' + str(data))
-except socket.timeout:
-	print('\tCould not connect. Moving on ...')
+		print(req.text + '\n')
